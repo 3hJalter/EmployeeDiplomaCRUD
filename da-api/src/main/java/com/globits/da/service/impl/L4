@@ -1,0 +1,207 @@
+
+    //-------------------------  Need to import before ------------------------//
+    import lombok.Getter;
+    import lombok.Setter;
+    import org.joda.time.LocalDate;
+
+    //-------------------------  L4 API ------------------------//
+
+    public Response<List<EmployeeDto>> findEmployeeWithMoreThanTwoDiplomas() {
+        List<EmployeeDto> employeeDtoList = employeeRepository.findAll()
+                .stream()
+                .map(employee -> modelMapper.map(employee, EmployeeDto.class))
+                .collect(Collectors.toList());
+        employeeDtoList.removeIf(employeeDto -> employeeDto.getDiplomaDto().size() < 2);
+        return new Response<>(employeeDtoList, EmployeeResponseMessage.SUCCESSFUL);
+    }
+
+    public Response<?> getNumberOfEmployeesInEachProvince() {
+        List<Province> provinceList = new ArrayList<>(provinceRepository.findAll());
+        @Setter
+        @Getter
+        class EmployeesInProvince {
+            private UUID provinceId;
+            private List<Employee> employees;
+        }
+        EmployeesInProvince[] employeesInProvinceList = new EmployeesInProvince[provinceList.size()];
+        for (int i = 0; i < provinceList.size(); i++) {
+            employeesInProvinceList[i].setProvinceId(provinceList.get(i).getId());
+        }
+        List<Employee> employeeList = new ArrayList<>(employeeRepository.findAll());
+        for (Employee employee : employeeList) {
+            for (EmployeesInProvince employeesInProvince : employeesInProvinceList) {
+                if (employee.getProvince().getId().equals(employeesInProvince.getProvinceId())) {
+                    employeesInProvince.employees.add(employee);
+                }
+            }
+        }
+        return new Response<>(employeesInProvinceList, EmployeeResponseMessage.SUCCESSFUL);
+    }
+
+    // uuid = provinceId
+
+    public List<Employee> findEmployeeListInProvince(UUID uuid) {
+        List<Employee> employeeList = new ArrayList<>();
+        for (Employee employee : employeeRepository.findAll()) {
+            if (employee.getProvince().getId().equals(uuid))
+                employeeList.add(employee);
+        }
+        return employeeList;
+    }
+
+    public Response<?> responseOfFindEmployeeListInProvince(UUID uuid) {
+        List<Employee> employeeList = findEmployeeListInProvince(uuid);
+        return new Response<>(employeeList, EmployeeResponseMessage.SUCCESSFUL);
+    }
+
+    public List<EmployeesInDistrict> findEmployeeListInEachDistrictByProvince(UUID uuid, List<Employee> employeeList) {
+        List<District> districtList = new ArrayList<>();
+        for (District district : districtRepository.findAll()) {
+            if (district.getProvince().getId().equals(uuid))
+                districtList.add(district);
+        }
+
+        List<EmployeesInDistrict> employeesInDistrictList = new ArrayList<>();
+        for (District district : districtList) {
+            EmployeesInDistrict employeesInDistrict = new EmployeesInDistrict();
+            employeesInDistrict.setDistrictId(district.getId());
+            employeesInDistrictList.add(employeesInDistrict);
+        }
+        if (employeeList == null) {
+            employeeList = findEmployeeListInProvince(uuid);
+        }
+        for (Employee employee : employeeList) {
+            for (EmployeesInDistrict employeesInDistrict : employeesInDistrictList) {
+                if (employee.getDistrict().getId().equals(employeesInDistrict.getDistrictId())) {
+                    employeesInDistrict.employees.add(employee);
+                }
+            }
+        }
+        return employeesInDistrictList;
+    }
+
+    public Response<?> responseOfFindEmployeeListInEachDistrictByProvince(UUID uuid) {
+        return new Response<>(findEmployeeListInEachDistrictByProvince(uuid, null),
+                EmployeeResponseMessage.SUCCESSFUL);
+    }
+
+    public EmployeeList separateEmployeesByDiplomasNumber(List<Employee> employees) {
+        if (employees == null) {
+            employees = employeeRepository.findAll();
+        }
+
+        List<Employee> oneDiplomaEmployeeList = new ArrayList<>();
+        List<Employee> twoDiplomasEmployeeList = new ArrayList<>();
+        List<Employee> threeOrMoreDiplomasEmployeeList = new ArrayList<>();
+        for (Employee employee : employees) {
+            if (employee.getDiplomaList().size() == 1) {
+                oneDiplomaEmployeeList.add(employee);
+            }
+            if (employee.getDiplomaList().size() == 2) {
+                twoDiplomasEmployeeList.add(employee);
+            }
+            if (employee.getDiplomaList().size() == 3) {
+                threeOrMoreDiplomasEmployeeList.add(employee);
+            }
+        }
+        EmployeeList employeeList = new EmployeeList();
+        employeeList.setOneDiplomaEmployeeList(oneDiplomaEmployeeList);
+        employeeList.setTwoDiplomasEmployeeList(twoDiplomasEmployeeList);
+        employeeList.setThreeOrMoreDiplomasEmployeeList(threeOrMoreDiplomasEmployeeList);
+        return employeeList;
+    }
+
+    public Response<?> getEmployeeListByDiplomasNumber() {
+        List<Employee> employeeListTemp = new ArrayList<>();
+        EmployeeList employeeList = separateEmployeesByDiplomasNumber(employeeListTemp);
+        return new Response<>(employeeList, EmployeeResponseMessage.SUCCESSFUL);
+    }
+
+    public Response<?> getEmployeeListByDiplomasNumberAndProvinceId(UUID uuid) {
+        List<Employee> employeeListTemp = findEmployeeListInProvince(uuid);
+        EmployeeList employeeList = separateEmployeesByDiplomasNumber(employeeListTemp);
+        return new Response<>(employeeList, EmployeeResponseMessage.SUCCESSFUL);
+    }
+
+    public Response<?> getEmployeeListByDiplomasNumberInEachDistrictOfProvinceId(UUID uuid) {
+        List<Employee> employeeListTemp = findEmployeeListInProvince(uuid);
+        EmployeeList employeeList = separateEmployeesByDiplomasNumber(employeeListTemp);
+        List<EmployeesInDistrict> oneDiplomaEmployeeListInDistrict = findEmployeeListInEachDistrictByProvince(uuid,
+                employeeList.getOneDiplomaEmployeeList());
+        List<EmployeesInDistrict> twoDiplomasEmployeeListInDistrict = findEmployeeListInEachDistrictByProvince(uuid,
+                employeeList.getTwoDiplomasEmployeeList());
+        List<EmployeesInDistrict> threeOrMoreDiplomasEmployeeListInDistrict = findEmployeeListInEachDistrictByProvince(uuid,
+                employeeList.getThreeOrMoreDiplomasEmployeeList());
+        List<List<EmployeesInDistrict>> summaryList = new ArrayList<>();
+        summaryList.add(oneDiplomaEmployeeListInDistrict);
+        summaryList.add(twoDiplomasEmployeeListInDistrict);
+        summaryList.add(threeOrMoreDiplomasEmployeeListInDistrict);
+        return new Response<>(summaryList, EmployeeResponseMessage.SUCCESSFUL);
+    }
+
+    public Response<?> FindPercentOfEachEmployeeListByDiplomasNumber() {
+        List<Employee> employees = employeeRepository.findAll();
+        EmployeeList employeeList = separateEmployeesByDiplomasNumber(employees);
+        int sizeOne = employeeList.getOneDiplomaEmployeeList().size();
+        int sizeTwo = employeeList.getTwoDiplomasEmployeeList().size();
+        int sizeThreeOrMore = employeeList.getThreeOrMoreDiplomasEmployeeList().size();
+        int size = employees.size();
+        float[] percentage = new float[3];
+        percentage[0] = (float) (sizeOne / size) * 100;
+        percentage[1] = (float) (sizeTwo / size) * 100;
+        percentage[2] = (float) (sizeThreeOrMore / size) * 100;
+        return new Response<>(percentage, EmployeeResponseMessage.SUCCESSFUL);
+    }
+
+    public Response<?> FindPercentOfEachEmployeeListByDiplomasNumberAndProvinceId(UUID uuid) {
+        List<Employee> employees = findEmployeeListInProvince(uuid);
+        EmployeeList employeeList = separateEmployeesByDiplomasNumber(employees);
+        int sizeOne = employeeList.getOneDiplomaEmployeeList().size();
+        int sizeTwo = employeeList.getTwoDiplomasEmployeeList().size();
+        int sizeThreeOrMore = employeeList.getThreeOrMoreDiplomasEmployeeList().size();
+        int size = employees.size();
+        float[] percentage = new float[3];
+        percentage[0] = (float) (sizeOne / size) * 100;
+        percentage[1] = (float) (sizeTwo / size) * 100;
+        percentage[2] = (float) (sizeThreeOrMore / size) * 100;
+        return new Response<>(percentage, EmployeeResponseMessage.SUCCESSFUL);
+    }
+
+    public List<Employee> findEmployeeListByCreatedDate(LocalDate startDate, LocalDate endDate) {
+        List<Employee> employeeList = employeeRepository.findAll();
+        for (Employee employee : employeeList) {
+            LocalDate createdDate = employee.getCreateDate().toLocalDate();
+            if (createdDate.isAfter(startDate) && createdDate.isBefore(endDate)) {
+                employeeList.add(employee);
+            }
+        }
+        return employeeList;
+    }
+
+    public Response<?> findEmployeeListInRecent30Days() {
+        LocalDate endDate = LocalDate.now();
+        LocalDate startDate = endDate.minusDays(30);
+        List<Employee> employeeList = findEmployeeListByCreatedDate(startDate, endDate);
+        return new Response<>(employeeList, EmployeeResponseMessage.SUCCESSFUL);
+    }
+
+    public Response<?> findEmployeeListByTime(LocalDate startDate, LocalDate endDate) {
+        return new Response<>(findEmployeeListByCreatedDate(startDate, endDate),
+                EmployeeResponseMessage.SUCCESSFUL);
+    }
+
+    @Setter
+    @Getter
+    static class EmployeesInDistrict {
+        private UUID districtId;
+        private List<Employee> employees;
+    }
+
+    @Getter
+    @Setter
+    static class EmployeeList {
+        List<Employee> oneDiplomaEmployeeList;
+        List<Employee> twoDiplomasEmployeeList;
+        List<Employee> threeOrMoreDiplomasEmployeeList;
+    }
+
